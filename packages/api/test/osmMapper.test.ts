@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { mapOverpassElement } from '../src/ingest/osmMapper.ts';
+import { extractPractitioner, mapOverpassElement } from '../src/ingest/osmMapper.ts';
 import type { OverpassElement } from '../src/geo/overpass.ts';
 
 const node = (tags: Record<string, string>, overrides: Partial<OverpassElement> = {}): OverpassElement => ({
@@ -98,6 +98,56 @@ describe('mapOverpassElement', () => {
     );
   });
 
+  it('extracts the practitioner when a practice is named after a doctor', () => {
+    const result = mapOverpassElement(
+      node({ name: 'Dr. D.S.Chopra', amenity: 'doctors' }),
+    );
+    assert.equal(result?.practitioner, 'Dr. D.S.Chopra');
+  });
+
+  it('leaves practitioner null for ordinary facility names', () => {
+    assert.equal(
+      mapOverpassElement(node({ name: 'Ruby General Hospital', amenity: 'hospital' }))?.practitioner,
+      null,
+    );
+  });
+
+  it('falls back to the operator tag for the practitioner', () => {
+    const result = mapOverpassElement(
+      node({ name: 'City Polyclinic', amenity: 'clinic', operator: 'Dr Pinaki Mazumder' }),
+    );
+    assert.equal(result?.practitioner, 'Dr. Pinaki Mazumder');
+  });
+});
+
+describe('extractPractitioner', () => {
+  // Every case here is a real name from the Kolkata OpenStreetMap extract.
+  const CASES: [input: string, expected: string | null][] = [
+    ['Dr. D.S.Chopra', 'Dr. D.S.Chopra'],
+    ['Dr. Syamal Kumar Pandey', 'Dr. Syamal Kumar Pandey'],
+    ["Dr Paul's Clinic", 'Dr. Paul'],
+    ['Seva Ckinic-Dr. M Rahaman', 'Dr. M Rahaman'],
+    ['Dr. B.N.Bose Sub-divisional Hospital', 'Dr. B.N.Bose'],
+    ['Dr Nihar Munshi Eye Foundation', 'Dr. Nihar Munshi'],
+    ['Dr. M. N. Chatterjee Memorial Eye Hospital', 'Dr. M. N. Chatterjee'],
+    ['Dr Rafi Ahmed Dental College & Hospital', 'Dr. Rafi Ahmed'],
+    ['Dr. B. C. Roy Post Graduate Institute', 'Dr. B. C. Roy'],
+    // Not people.
+    ['Ruby General Hospital', null],
+    ['Dental Exotica', null],
+    ['drug store', null],
+    ["Children's Hospital", null],
+    ['', null],
+  ];
+
+  for (const [input, expected] of CASES) {
+    it(`"${input || '(empty)'}" -> ${expected ?? 'null'}`, () => {
+      assert.equal(extractPractitioner(input), expected);
+    });
+  }
+});
+
+describe('mapOverpassElement — misc', () => {
   it('builds a stable source id per OSM element', () => {
     const result = mapOverpassElement(node({ name: 'A', amenity: 'clinic' }, { id: 987 }));
     assert.equal(result?.sourceId, 'node/987');

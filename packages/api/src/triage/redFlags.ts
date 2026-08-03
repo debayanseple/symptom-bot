@@ -60,6 +60,11 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       'heart attack',
       'cardiac arrest',
       'squeezing (feeling )?in (my |the )?chest',
+      // "my chest hurts" is the same complaint as "chest pain" and was
+      // previously reaching the non-emergency path.
+      'chest (is |feels )?(hurting|hurts|aching|burning|sore|heavy|tight)',
+      'sore chest',
+      'burning in (my |the )?chest',
     ),
   },
   {

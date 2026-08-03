@@ -15,9 +15,11 @@ interface Turn {
 
 const EXAMPLES = [
   'itchy rash on my arm for a week',
-  'toothache on the lower left side',
+  'teeth pain on the lower left side',
   'knee pain when I climb stairs',
-  'wheezing at night and a dry cough',
+  // Name lookups work too, and without needing a location.
+  'Ruby General Hospital',
+  'Dr Chopra',
 ];
 
 export function App(): JSX.Element {
@@ -92,7 +94,9 @@ export function App(): JSX.Element {
       <main className="conversation">
         {turns.length === 0 && (
           <div className="examples">
-            <p className="examples__label">Try one of these:</p>
+            <p className="examples__label">
+              Describe a symptom, or search for a doctor or hospital by name:
+            </p>
             <ul className="examples__list">
               {EXAMPLES.map((example) => (
                 <li key={example}>
@@ -119,6 +123,24 @@ export function App(): JSX.Element {
 
             {turn.response?.kind === 'clarification' && (
               <p className="bubble bubble--bot">{turn.response.message}</p>
+            )}
+
+            {turn.response?.kind === 'directory' && (
+              <div className="bubble bubble--bot">
+                <p className="recommendation__specialty">
+                  Search results for <strong>{turn.response.query}</strong>
+                </p>
+                <p>{turn.response.message}</p>
+                <div className="facility-list">
+                  {turn.response.facilities.map((facility) => (
+                    <FacilityCard
+                      key={facility.id}
+                      facility={facility}
+                      showDistance={turn.response?.kind === 'directory' && turn.response.hasLocation}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
 
             {turn.response?.kind === 'recommendation' && (

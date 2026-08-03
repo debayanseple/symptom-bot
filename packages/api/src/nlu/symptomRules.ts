@@ -91,6 +91,63 @@ export const SYMPTOM_RULES: SymptomRule[] = [
   { specialty: 'general_practice', weight: 2, keywords: ['fever', 'flu', 'cold', 'body ache', 'weakness', 'fatigue', 'general checkup', 'health checkup', 'blood test', 'not feeling well', 'unwell', 'viral'] },
 ];
 
+/**
+ * Words people use to say something is wrong. Kept separate from body parts so
+ * the two combine freely: enumerating whole phrases meant "tooth pain" matched
+ * while "teeth pain", "my teeth hurt" and "sore teeth" all scored zero and fell
+ * through to general practice.
+ */
+export const SYMPTOM_EXPRESSIONS = [
+  'pain', 'pains', 'paining', 'painful', 'ache', 'aches', 'aching', 'achy',
+  'hurt', 'hurts', 'hurting', 'sore', 'soreness', 'discomfort',
+  'swollen', 'swelling', 'burning', 'itchy', 'itching', 'itches',
+  'sensitive', 'sensitivity', 'bleeding', 'stiff', 'stiffness',
+  'numb', 'numbness', 'cramp', 'cramps', 'infection', 'infected',
+  'problem', 'problems', 'issue', 'issues', 'trouble', 'weak', 'weakness',
+  'irritation', 'irritated', 'discharge', 'rash', 'lump', 'injury', 'injured',
+];
+
+export interface BodyPartRule {
+  specialty: Specialty;
+  /** Whole words, so 'ear' cannot match 'early'. Plurals listed explicitly. */
+  parts: string[];
+  weight: number;
+  /**
+   * When false the part only counts if the message also carries a symptom
+   * word — 'back' and 'head' are far too common in ordinary English to imply
+   * a complaint on their own.
+   */
+  standalone: boolean;
+}
+
+export const BODY_PART_RULES: BodyPartRule[] = [
+  { specialty: 'dentistry', weight: 3, standalone: true,
+    parts: ['tooth', 'teeth', 'gum', 'gums', 'molar', 'molars', 'dentures'] },
+  { specialty: 'ophthalmology', weight: 3, standalone: true,
+    parts: ['eye', 'eyes', 'eyelid', 'eyelids', 'eyesight', 'eyeball'] },
+  { specialty: 'ent', weight: 3, standalone: true,
+    parts: ['ear', 'ears', 'throat', 'tonsil', 'tonsils', 'sinus', 'sinuses', 'nostril', 'nostrils'] },
+  { specialty: 'ent', weight: 2, standalone: false, parts: ['nose'] },
+  { specialty: 'orthopaedics', weight: 3, standalone: true,
+    parts: ['knee', 'knees', 'ankle', 'ankles', 'elbow', 'elbows', 'wrist', 'wrists',
+            'shoulder', 'shoulders', 'joint', 'joints', 'spine', 'heel', 'heels'] },
+  { specialty: 'orthopaedics', weight: 2, standalone: false,
+    parts: ['back', 'hip', 'hips', 'bone', 'bones', 'muscle', 'muscles', 'leg', 'legs', 'arm', 'arms'] },
+  { specialty: 'gastroenterology', weight: 3, standalone: true,
+    parts: ['stomach', 'tummy', 'belly', 'abdomen', 'abdominal', 'bowel', 'bowels', 'intestine', 'intestines'] },
+  { specialty: 'dermatology', weight: 3, standalone: true,
+    parts: ['skin', 'scalp'] },
+  { specialty: 'dermatology', weight: 2, standalone: false, parts: ['nail', 'nails'] },
+  { specialty: 'neurology', weight: 2, standalone: false, parts: ['head', 'nerve', 'nerves'] },
+  { specialty: 'urology', weight: 3, standalone: true,
+    parts: ['bladder', 'urine', 'urination', 'testicle', 'testicles'] },
+  { specialty: 'gynaecology', weight: 3, standalone: true,
+    parts: ['period', 'periods', 'vagina', 'vaginal', 'uterus', 'ovary', 'ovaries', 'breast', 'breasts'] },
+  { specialty: 'pulmonology', weight: 3, standalone: true,
+    parts: ['lung', 'lungs', 'breathing'] },
+  { specialty: 'nephrology', weight: 3, standalone: true, parts: ['kidney', 'kidneys'] },
+];
+
 export interface RuleClassification {
   specialty: Specialty;
   confidence: number;
@@ -106,6 +163,16 @@ function matches(message: string, keyword: string): boolean {
   return new RegExp(`(?<![a-z])${escaped}`, 'i').test(message);
 }
 
+/**
+ * Whole-word match, both edges anchored. Body parts need this: a left-anchored
+ * 'ear' happily matches 'early', which would route anyone mentioning an early
+ * morning headache to an ENT clinic.
+ */
+function matchesWord(message: string, word: string): boolean {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, 'i').test(message);
+}
+
 export function classifyByRules(rawMessage: string): RuleClassification {
   const message = rawMessage.toLowerCase().replace(/[‘’]/g, "'");
   const scores = new Map<Specialty, number>();
@@ -116,6 +183,20 @@ export function classifyByRules(rawMessage: string): RuleClassification {
       if (!matches(message, keyword)) continue;
       scores.set(rule.specialty, (scores.get(rule.specialty) ?? 0) + rule.weight);
       matched.push(keyword);
+    }
+  }
+
+  // Body part + symptom word, scored independently of the phrase list above.
+  const hasSymptomWord = SYMPTOM_EXPRESSIONS.some((w) => matchesWord(message, w));
+  for (const rule of BODY_PART_RULES) {
+    if (!rule.standalone && !hasSymptomWord) continue;
+    for (const part of rule.parts) {
+      if (!matchesWord(message, part)) continue;
+      scores.set(rule.specialty, (scores.get(rule.specialty) ?? 0) + rule.weight);
+      matched.push(part);
+      // One hit per rule: "my knees and ankles hurt" is one orthopaedic
+      // complaint, not two, and shouldn't outscore a specific diagnosis.
+      break;
     }
   }
 

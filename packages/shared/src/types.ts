@@ -60,6 +60,12 @@ export interface Facility {
   sourceId: string;
   source: FacilitySource;
   name: string;
+  /**
+   * The doctor's name, when the facility is recorded under one. OSM has no
+   * practitioner roster, so this is only populated for practices named after
+   * the doctor who runs them — never a list of staff at a hospital.
+   */
+  practitioner: string | null;
   type: FacilityType;
   specialtyTags: Specialty[];
   lat: number;
@@ -116,6 +122,17 @@ export interface RecommendationResponse {
   disclaimer: string;
 }
 
+/** Result of a lookup by facility or doctor name, rather than by symptom. */
+export interface DirectoryResponse {
+  kind: 'directory';
+  query: string;
+  message: string;
+  facilities: RankedFacility[];
+  /** True when the user's location was known and distances are meaningful. */
+  hasLocation: boolean;
+  disclaimer: string;
+}
+
 export interface ClarificationResponse {
   kind: 'clarification';
   message: string;
@@ -124,7 +141,11 @@ export interface ClarificationResponse {
   disclaimer: string;
 }
 
-export type ChatResponse = EmergencyResponse | RecommendationResponse | ClarificationResponse;
+export type ChatResponse =
+  | EmergencyResponse
+  | RecommendationResponse
+  | DirectoryResponse
+  | ClarificationResponse;
 
 export const DISCLAIMER =
   'This is not a diagnosis. Call Doc suggests which kind of doctor may be relevant and where to find one nearby — it cannot assess your condition. If you feel your symptoms are severe or worsening, contact emergency services or go to the nearest emergency department.';

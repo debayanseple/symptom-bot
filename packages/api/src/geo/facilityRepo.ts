@@ -8,6 +8,7 @@ interface FacilityRow {
   source: string;
   source_id: string;
   name: string;
+  practitioner: string | null;
   type: string;
   specialty_tags: string[];
   lat: number;
@@ -71,8 +72,8 @@ export async function findNearby(params: NearbyQuery): Promise<NearbyFacility[]>
   values.push(limit);
 
   const sql = `
-    SELECT id, source, source_id, name, type, specialty_tags, lat, lon, address,
-           phone, website, opening_hours, emergency, description, last_synced_at,
+    SELECT id, source, source_id, name, practitioner, type, specialty_tags, lat, lon,
+           address, phone, website, opening_hours, emergency, description, last_synced_at,
            haversine_km($5, $6, lat, lon) AS distance_km
     FROM facilities
     WHERE ${conditions.join(' AND ')}
@@ -120,6 +121,94 @@ export async function findNearestEmergency(
   });
 }
 
+/**
+ * Fuzzy lookup by facility or doctor name, powered by the pg_trgm GIN indexes.
+ *
+ * Deliberately does NOT require a location: someone searching for "Dr Chopra"
+ * or "Ruby General" wants that specific place, and refusing to answer until
+ * they share coordinates would be obstructive. Distance is added when a
+ * location happens to be known.
+ */
+export async function searchByName(
+  term: string,
+  options: { centre?: Coordinates; limit?: number; minSimilarity?: number } = {},
+): Promise<{ facility: NearbyFacility; similarity: number }[]> {
+  const query_ = term.trim();
+  if (query_.length < 3) return [];
+
+  const { centre, limit = 10, minSimilarity = 0.25 } = options;
+  const lat = centre?.lat ?? 0;
+  const lon = centre?.lon ?? 0;
+
+  const { rows } = await query<FacilityRow & { similarity: number }>(
+    `
+    SELECT id, source, source_id, name, practitioner, type, specialty_tags, lat, lon,
+           address, phone, website, opening_hours, emergency, description, last_synced_at,
+           haversine_km($2, $3, lat, lon) AS distance_km,
+           GREATEST(
+             similarity(name, $1),
+             COALESCE(similarity(practitioner, $1), 0),
+             -- A substring hit is a strong signal that trigram similarity
+             -- underrates when the query is much shorter than the full name.
+             CASE WHEN name ILIKE '%' || $1 || '%' THEN 0.75 ELSE 0 END,
+             CASE WHEN practitioner ILIKE '%' || $1 || '%' THEN 0.8 ELSE 0 END
+           ) AS similarity
+    FROM facilities
+    WHERE type <> 'pharmacy'
+      AND (
+        name % $1
+        OR practitioner % $1
+        OR name ILIKE '%' || $1 || '%'
+        OR practitioner ILIKE '%' || $1 || '%'
+      )
+    ORDER BY similarity DESC, distance_km ASC
+    LIMIT $4
+    `,
+    [query_, lat, lon, limit],
+  );
+
+  return rows
+    .filter((row) => Number(row.similarity) >= minSimilarity)
+    .map((row) => ({ facility: toFacility(row), similarity: Number(row.similarity) }));
+}
+
+/**
+ * Facilities recorded under a named doctor. This is the closest this dataset
+ * gets to "list me some doctors" — OSM records the practitioner only when the
+ * practice is named after them, so this is a subset of facilities, never a
+ * staff directory.
+ */
+export async function findNamedDoctors(
+  options: { centre?: Coordinates; specialty?: Specialty; limit?: number } = {},
+): Promise<NearbyFacility[]> {
+  const { centre, specialty, limit = 25 } = options;
+  const values: unknown[] = [centre?.lat ?? 0, centre?.lon ?? 0];
+  let specialtyClause = '';
+
+  if (specialty) {
+    values.push(specialty);
+    specialtyClause = `AND specialty_tags && ARRAY[$${values.length}]::text[]`;
+  }
+  values.push(limit);
+
+  const { rows } = await query<FacilityRow>(
+    `
+    SELECT id, source, source_id, name, practitioner, type, specialty_tags, lat, lon,
+           address, phone, website, opening_hours, emergency, description, last_synced_at,
+           haversine_km($1, $2, lat, lon) AS distance_km
+    FROM facilities
+    WHERE practitioner IS NOT NULL
+      AND type <> 'pharmacy'
+      ${specialtyClause}
+    ORDER BY ${centre ? 'distance_km ASC' : 'name ASC'}
+    LIMIT $${values.length}
+    `,
+    values,
+  );
+
+  return rows.map(toFacility);
+}
+
 export async function getFacilityById(id: string): Promise<NearbyFacility | undefined> {
   const { rows } = await query<FacilityRow>(
     `SELECT *, 0::double precision AS distance_km FROM facilities WHERE id = $1`,
@@ -148,11 +237,12 @@ export async function upsertFacilities(
       const chunk = facilities.slice(i, i + CHUNK);
       const values: unknown[] = [];
       const tuples = chunk.map((facility, index) => {
-        const base = index * 15;
+        const base = index * 16;
         values.push(
           facility.source,
           facility.sourceId,
           facility.name,
+          facility.practitioner,
           facility.type,
           facility.specialtyTags,
           facility.lat,
@@ -167,17 +257,18 @@ export async function upsertFacilities(
           JSON.stringify(facility.rawTags),
         );
         const p = (offset: number) => `$${base + offset}`;
-        return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}::text[], ${p(6)}, ${p(7)}, ${p(8)}, ${p(9)}, ${p(10)}, ${p(11)}, ${p(12)}, ${p(13)}, ${p(14)}, ${p(15)}::jsonb)`;
+        return `(${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}::text[], ${p(7)}, ${p(8)}, ${p(9)}, ${p(10)}, ${p(11)}, ${p(12)}, ${p(13)}, ${p(14)}, ${p(15)}, ${p(16)}::jsonb)`;
       });
 
       const result = await client.query(
         `
         INSERT INTO facilities (
-          source, source_id, name, type, specialty_tags, lat, lon, address,
-          phone, website, opening_hours, emergency, description, city_key, raw_tags
+          source, source_id, name, practitioner, type, specialty_tags, lat, lon,
+          address, phone, website, opening_hours, emergency, description, city_key, raw_tags
         ) VALUES ${tuples.join(', ')}
         ON CONFLICT (source, source_id) DO UPDATE SET
           name           = EXCLUDED.name,
+          practitioner   = EXCLUDED.practitioner,
           type           = EXCLUDED.type,
           specialty_tags = EXCLUDED.specialty_tags,
           lat            = EXCLUDED.lat,
@@ -217,6 +308,7 @@ function toFacility(row: FacilityRow): NearbyFacility {
     source: row.source as Facility['source'],
     sourceId: row.source_id,
     name: row.name,
+    practitioner: row.practitioner,
     type: row.type as FacilityType,
     specialtyTags: row.specialty_tags as Specialty[],
     lat: row.lat,

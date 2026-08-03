@@ -13,6 +13,10 @@ const MUST_FIRE: Record<string, string[]> = {
     'I have really bad chest pain and I feel sweaty',
     'there is a crushing chest pressure',
     'i think im having a heart attack',
+    // Same complaint, colloquial phrasing — previously reached the
+    // non-emergency path because only "chest pain" was matched.
+    'my chest hurts',
+    'my chest feels tight',
   ],
   'cardiac.radiating_pain': ['the pain is radiating down my left arm'],
   'respiratory.severe': ["I can't breathe properly", 'my dad is gasping for air'],

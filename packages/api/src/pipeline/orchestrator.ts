@@ -1,11 +1,18 @@
 import { DISCLAIMER, isValidCoordinates, specialtyLabel } from '@calldoc/shared';
-import type { ChatRequest, ChatResponse, Coordinates } from '@calldoc/shared';
+import type {
+  ChatRequest,
+  ChatResponse,
+  Coordinates,
+  DirectoryResponse,
+  RankedFacility,
+} from '@calldoc/shared';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { detectRedFlags } from '../triage/redFlags.js';
 import { buildEmergencyResponse } from '../triage/emergencyResponse.js';
 import { analyseSymptoms } from '../nlu/classifier.js';
-import { findNearbyWithExpansion, findNearestEmergency } from '../geo/facilityRepo.js';
+import { findNearbyWithExpansion, findNearestEmergency, searchByName } from '../geo/facilityRepo.js';
+import type { NearbyFacility } from '../geo/facilityRepo.js';
 import { rerank } from '../rag/retriever.js';
 import { synthesiseExplanation } from '../llm/synthesis.js';
 import { geocode } from '../geo/nominatim.js';
@@ -65,6 +72,14 @@ export async function handleChat(request: ChatRequest): Promise<ChatResponse> {
 
   // --- Location ----------------------------------------------------------
   const location = await resolveLocation(request);
+
+  // --- Name lookup -------------------------------------------------------
+  // Runs before the symptom path, and before the location requirement, because
+  // "Dr Chopra" and "Ruby General" are requests for a specific place — not
+  // descriptions of a complaint, and not something to refuse without GPS.
+  const directory = await tryNameLookup(message, location);
+  if (directory) return directory;
+
   if (!location) {
     return {
       kind: 'clarification',
@@ -135,6 +150,87 @@ export async function handleChat(request: ChatRequest): Promise<ChatResponse> {
     radiusKm,
     disclaimer: DISCLAIMER,
   };
+}
+
+/**
+ * Words that mean "I am naming a place", and words that mean "I am describing
+ * a complaint". Used to decide how confident a name match has to be before it
+ * outranks the symptom pipeline.
+ */
+const NAME_INTENT = /\b(dr|doctor|prof|hospital|clinic|nursing home|polyclinic|centre|center|institute|foundation|college|diagnostics?)\b/i;
+const SYMPTOM_INTENT =
+  /\b(pain|ache|aching|hurts?|hurting|sore|fever|cough|rash|itch\w*|swollen|swelling|bleeding|vomit\w*|nausea|dizzy|dizziness|tired|weak\w*|symptom|feeling|felt|since|days?|weeks?)\b/i;
+
+/**
+ * Decides whether the message is a lookup by name and, if so, answers it.
+ *
+ * Returns undefined when the message does not look like a name search, so the
+ * caller falls through to the symptom pipeline. The thresholds are asymmetric
+ * on purpose: a symptom description that happens to resemble a facility name
+ * must not hijack triage-adjacent routing, so anything carrying symptom
+ * vocabulary needs a near-exact name match to qualify.
+ */
+async function tryNameLookup(
+  message: string,
+  location: Coordinates | undefined,
+): Promise<DirectoryResponse | undefined> {
+  const term = message.trim().replace(/^(find|search|show|looking for|where is|locate)\s+/i, '');
+  if (term.length < 3 || term.length > 80) return undefined;
+
+  const namesAPlace = NAME_INTENT.test(term);
+  const describesSymptoms = SYMPTOM_INTENT.test(term);
+
+  // "chest pain clinic" mentions a place word but is plainly a complaint.
+  if (describesSymptoms && !namesAPlace) return undefined;
+
+  const threshold = describesSymptoms ? 0.85 : namesAPlace ? 0.4 : 0.55;
+
+  let matches: Awaited<ReturnType<typeof searchByName>>;
+  try {
+    matches = await searchByName(term, {
+      ...(location ? { centre: location } : {}),
+      limit: 8,
+      minSimilarity: threshold,
+    });
+  } catch (error) {
+    logger.warn({ err: String(error) }, 'name lookup failed, falling through to symptoms');
+    return undefined;
+  }
+
+  if (matches.length === 0) return undefined;
+
+  const facilities: RankedFacility[] = matches.map(({ facility, similarity }) => ({
+    ...facility,
+    score: similarity,
+    reason: describeMatch(facility, Boolean(location)),
+  }));
+
+  const named = facilities.filter((f) => f.practitioner).length;
+  const message_ =
+    facilities.length === 1
+      ? `Found ${facilities[0]!.practitioner ?? facilities[0]!.name}.`
+      : `Found ${facilities.length} matches for "${term}"${named > 0 ? `, ${named} listed under a doctor's name` : ''}.`;
+
+  return {
+    kind: 'directory',
+    query: term,
+    message: `${message_}${location ? '' : ' Share your location to see how far away they are.'}`,
+    facilities,
+    hasLocation: Boolean(location),
+    disclaimer: DISCLAIMER,
+  };
+}
+
+function describeMatch(facility: NearbyFacility, hasLocation: boolean): string {
+  const bits: string[] = [];
+  if (facility.practitioner) bits.push(`listed under ${facility.practitioner}`);
+  if (facility.specialtyTags.length && facility.specialtyTags[0] !== 'general_practice') {
+    bits.push(facility.specialtyTags.map(specialtyLabel).join(', ').toLowerCase());
+  }
+  if (hasLocation) bits.push(`${facility.distanceKm.toFixed(1)} km away`);
+  if (facility.emergency) bits.push('has an emergency department');
+  if (!facility.phone) bits.push('no phone number listed in OpenStreetMap');
+  return bits.length ? `${bits.join(', ')}.` : 'Listed in OpenStreetMap.';
 }
 
 /**

@@ -2,7 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { isSpecialty } from '@calldoc/shared';
 import { z } from 'zod';
 import { config } from '../config.js';
-import { countFacilities, findNearby, getFacilityById } from '../geo/facilityRepo.js';
+import {
+  countFacilities,
+  findNamedDoctors,
+  findNearby,
+  getFacilityById,
+  searchByName,
+} from '../geo/facilityRepo.js';
 import { CITIES } from '../ingest/cities.js';
 
 const nearbySchema = z.object({
@@ -36,6 +42,67 @@ export async function facilityRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.send({ count: facilities.length, facilities });
+  });
+
+  /**
+   * Lookup by facility or doctor name. Location is optional by design — a name
+   * search should work before the user has shared where they are.
+   */
+  app.get('/api/facilities/search', async (request, reply) => {
+    const parsed = z
+      .object({
+        q: z.string().min(2).max(80),
+        lat: z.coerce.number().min(-90).max(90).optional(),
+        lon: z.coerce.number().min(-180).max(180).optional(),
+        limit: z.coerce.number().int().positive().max(50).optional(),
+        doctorsOnly: z.coerce.boolean().optional(),
+      })
+      .safeParse(request.query);
+
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_request', issues: parsed.error.issues });
+    }
+
+    const { q, lat, lon, limit, doctorsOnly } = parsed.data;
+    const results = await searchByName(q, {
+      ...(lat !== undefined && lon !== undefined ? { centre: { lat, lon } } : {}),
+      limit: limit ?? 10,
+    });
+
+    const facilities = results
+      .filter((r) => !doctorsOnly || r.facility.practitioner)
+      .map((r) => ({ ...r.facility, similarity: r.similarity }));
+
+    return reply.send({ query: q, count: facilities.length, facilities });
+  });
+
+  /** Facilities recorded under a named doctor. */
+  app.get('/api/doctors', async (request, reply) => {
+    const parsed = z
+      .object({
+        lat: z.coerce.number().min(-90).max(90).optional(),
+        lon: z.coerce.number().min(-180).max(180).optional(),
+        specialty: z.string().optional(),
+        limit: z.coerce.number().int().positive().max(100).optional(),
+      })
+      .safeParse(request.query);
+
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'invalid_request' });
+    }
+
+    const { lat, lon, specialty, limit } = parsed.data;
+    if (specialty && !isSpecialty(specialty)) {
+      return reply.status(400).send({ error: 'unknown_specialty', specialty });
+    }
+
+    const doctors = await findNamedDoctors({
+      ...(lat !== undefined && lon !== undefined ? { centre: { lat, lon } } : {}),
+      ...(specialty && isSpecialty(specialty) ? { specialty } : {}),
+      limit: limit ?? 25,
+    });
+
+    return reply.send({ count: doctors.length, doctors });
   });
 
   app.get('/api/facilities/:id', async (request, reply) => {

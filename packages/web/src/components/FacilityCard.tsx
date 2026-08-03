@@ -9,17 +9,37 @@ const TYPE_LABEL: Record<RankedFacility['type'], string> = {
   pharmacy: 'Pharmacy',
 };
 
-export function FacilityCard({ facility }: { facility: RankedFacility }): JSX.Element {
+interface Props {
+  facility: RankedFacility;
+  /** Hidden for name searches made before the user shared a location. */
+  showDistance?: boolean;
+}
+
+export function FacilityCard({ facility, showDistance = true }: Props): JSX.Element {
   const mapsUrl = `https://www.openstreetmap.org/?mlat=${facility.lat}&mlon=${facility.lon}#map=17/${facility.lat}/${facility.lon}`;
 
   return (
     <article className="facility">
       <header className="facility__header">
-        <h3 className="facility__name">{facility.name}</h3>
-        <span className="facility__distance">{formatDistance(facility.distanceKm)}</span>
+        <div className="facility__titles">
+          {/* When OSM records the practice under a doctor's name, lead with the
+              person — that is what someone asking for "a doctor" wants to see. */}
+          {facility.practitioner ? (
+            <>
+              <h3 className="facility__name">{facility.practitioner}</h3>
+              <p className="facility__at">{facility.name}</p>
+            </>
+          ) : (
+            <h3 className="facility__name">{facility.name}</h3>
+          )}
+        </div>
+        {showDistance && (
+          <span className="facility__distance">{formatDistance(facility.distanceKm)}</span>
+        )}
       </header>
 
       <p className="facility__meta">
+        {facility.practitioner && <span className="tag tag--doctor">Named doctor</span>}
         <span className="tag">{TYPE_LABEL[facility.type]}</span>
         {facility.emergency && <span className="tag tag--emergency">Emergency dept.</span>}
         {facility.openingHours === '24/7' && <span className="tag tag--open">Open 24h</span>}

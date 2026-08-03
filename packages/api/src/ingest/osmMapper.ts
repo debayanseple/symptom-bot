@@ -6,6 +6,8 @@ export interface MappedFacility {
   source: 'osm';
   sourceId: string;
   name: string;
+  /** Doctor's name, when the facility is named after its practitioner. */
+  practitioner: string | null;
   type: FacilityType;
   specialtyTags: Specialty[];
   lat: number;
@@ -44,6 +46,7 @@ export function mapOverpassElement(element: OverpassElement): MappedFacility | n
     source: 'osm',
     sourceId: `${element.type}/${element.id}`,
     name: name.trim(),
+    practitioner: extractPractitioner(name.trim()) ?? extractPractitioner(tags['operator'] ?? ''),
     type,
     specialtyTags: resolveSpecialties(tags, type),
     lat,
@@ -64,6 +67,59 @@ export function mapOverpassElement(element: OverpassElement): MappedFacility | n
     description: composeDescription(name.trim(), type, tags),
     rawTags: tags,
   };
+}
+
+/**
+ * Words that end a person's name and start the facility's description, so
+ * "Dr. B.N.Bose Sub-divisional Hospital" yields "Dr. B.N.Bose" and not the
+ * whole string.
+ */
+const NAME_STOP_WORDS = new RegExp(
+  '^(clinic|clinics|hospital|hospitals|nursing|home|centre|center|polyclinic|' +
+    'dental|eye|memorial|foundation|college|institute|research|diagnostic|' +
+    'diagnostics|chamber|chambers|pvt|ltd|limited|and|&|sub-divisional|' +
+    'multispeciality|multi-speciality|speciality|specialty|care|health|' +
+    'healthcare|medical|maternity|surgical|lab|laboratory|post|graduate|' +
+    'general|national|state|government|govt|city|trust|society|mission)$',
+  'i',
+);
+
+/**
+ * Pulls a practitioner name out of a facility name.
+ *
+ * OSM has no practitioner tag, but a large share of Indian clinics are mapped
+ * under the doctor's own name. Recognising that is the only way this dataset
+ * can answer "suggest a doctor" rather than only "suggest a building".
+ */
+export function extractPractitioner(text: string): string | null {
+  if (!text) return null;
+
+  // Find the honorific anywhere in the string — "Seva Ckinic-Dr. M Rahaman"
+  // puts it at the end.
+  const match = /(?:^|[^a-z])(dr|doctor|prof)\.?\s*([A-Z][^,;|]*)/i.exec(text);
+  if (!match) return null;
+
+  const honorific = match[1]!.toLowerCase() === 'prof' ? 'Prof.' : 'Dr.';
+  const rest = match[2]!;
+
+  // Split on whitespace but keep dotted initials ("D.S.Chopra") intact.
+  const words: string[] = [];
+  for (const raw of rest.split(/\s+/)) {
+    const word = raw.replace(/[^A-Za-z.'`-]/g, '');
+    if (!word) break;
+    // "Dr Paul's Clinic" — the possessive marks the end of the person's name.
+    const possessive = /['’]s$/i.test(raw);
+    const bare = word.replace(/['’]s$/i, '');
+    if (NAME_STOP_WORDS.test(bare)) break;
+    // A name token must start uppercase; lowercase means we have run into prose.
+    if (!/^[A-Z]/.test(bare)) break;
+    words.push(bare);
+    if (possessive) break;
+    if (words.length >= 4) break;
+  }
+
+  if (words.length === 0) return null;
+  return `${honorific} ${words.join(' ')}`.replace(/\s+/g, ' ').trim();
 }
 
 function resolveType(tags: Record<string, string>): FacilityType | null {

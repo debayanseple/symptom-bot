@@ -27,6 +27,54 @@ describe('classifyByRules', () => {
     });
   }
 
+  // Regression: the phrase list only held singular nouns and "<part> pain",
+  // so plurals and "my <part> hurts" scored zero and fell through to general
+  // practice. "teeth pain" was the reported bug.
+  const NATURAL: [message: string, expected: string][] = [
+    ['teeth pain', 'dentistry'],
+    ['my teeth hurt', 'dentistry'],
+    ['teeth sensitive', 'dentistry'],
+    ['my eyes hurt', 'ophthalmology'],
+    ['sore eyes', 'ophthalmology'],
+    ['my ears hurt', 'ent'],
+    ['throat hurts', 'ent'],
+    ['my knees hurt', 'orthopaedics'],
+    ['shoulder hurts', 'orthopaedics'],
+    ['my back hurts', 'orthopaedics'],
+    ['my stomach hurts', 'gastroenterology'],
+    ['my tummy is paining', 'gastroenterology'],
+    ['my skin is itching', 'dermatology'],
+    ['head hurts', 'neurology'],
+    ['lungs problem', 'pulmonology'],
+    ['period pain', 'gynaecology'],
+  ];
+
+  for (const [message, expected] of NATURAL) {
+    it(`handles natural phrasing "${message}" -> ${expected}`, () => {
+      const result = classifyByRules(message);
+      assert.equal(result.specialty, expected);
+      assert.ok(result.confidence >= 0.45, `confidence ${result.confidence} too low to route`);
+    });
+  }
+
+  // Body-part words are common in ordinary English. Whole-word matching stops
+  // 'ear' matching 'early', and ambiguous parts need a symptom word present.
+  const NOT_SYMPTOMS = [
+    'early morning appointment',
+    'I will be back tomorrow',
+    'head of the queue',
+    'I heard a noise',
+    'can I get an armchair',
+  ];
+
+  for (const message of NOT_SYMPTOMS) {
+    it(`does not treat "${message}" as a complaint`, () => {
+      const result = classifyByRules(message);
+      assert.equal(result.specialty, 'general_practice');
+      assert.ok(result.confidence < 0.45, `should not route confidently, got ${result.confidence}`);
+    });
+  }
+
   it('falls back to general practice for vague input', () => {
     const result = classifyByRules('I just feel a bit off today');
     assert.equal(result.specialty, 'general_practice');
