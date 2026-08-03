@@ -53,7 +53,7 @@ export interface SymptomAnalysis {
 
 export type FacilityType = 'hospital' | 'clinic' | 'doctor' | 'dentist' | 'pharmacy';
 
-export type FacilitySource = 'osm' | 'foursquare' | 'manual';
+export type FacilitySource = 'osm' | 'google' | 'foursquare' | 'manual';
 
 export interface Facility {
   id: string;
@@ -119,6 +119,11 @@ export interface RecommendationResponse {
   /** True when the radius was widened because the first pass found nothing. */
   radiusExpanded: boolean;
   radiusKm: number;
+  /**
+   * Which dataset the shown results came from. Google's terms require visible
+   * attribution wherever Places content appears, so the UI needs to know.
+   */
+  attribution: 'osm' | 'google';
   disclaimer: string;
 }
 

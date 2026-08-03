@@ -158,11 +158,18 @@ export function App(): JSX.Element {
                 )}
 
                 {turn.response.facilities.length > 0 ? (
-                  <div className="facility-list">
-                    {turn.response.facilities.map((facility) => (
-                      <FacilityCard key={facility.id} facility={facility} />
-                    ))}
-                  </div>
+                  <>
+                    <div className="facility-list">
+                      {turn.response.facilities.map((facility) => (
+                        <FacilityCard key={facility.id} facility={facility} />
+                      ))}
+                    </div>
+                    {/* Google's terms require visible attribution wherever
+                        Places content is shown. */}
+                    {turn.response.attribution === 'google' && (
+                      <p className="attribution">Some results powered by Google</p>
+                    )}
+                  </>
                 ) : (
                   <p className="recommendation__note">
                     No matching facility was found in the area covered so far. Coverage is

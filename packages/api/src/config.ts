@@ -67,6 +67,23 @@ export const config = {
     minSpecialtyConfidence: 0.45,
   },
 
+  google: {
+    /**
+     * Off by default. Every search with this on is a billed Places call, so
+     * enabling it is a deliberate act, not a default the app drifts into.
+     */
+    enabled: bool('GOOGLE_PLACES_ENABLED', false),
+    apiKey: str('GOOGLE_MAPS_API_KEY', ''),
+    maxResults: num('GOOGLE_PLACES_MAX_RESULTS', 10),
+    /**
+     * Ratings and review counts sit in a pricier billing tier with a much
+     * smaller free allowance than contact details. Separate flag so cost can
+     * be controlled independently of whether Google is used at all.
+     */
+    includeRatings: bool('GOOGLE_PLACES_INCLUDE_RATINGS', false),
+    timeoutMs: num('GOOGLE_PLACES_TIMEOUT_MS', 6000),
+  },
+
   foursquare: {
     apiKey: str('FOURSQUARE_API_KEY', ''),
   },

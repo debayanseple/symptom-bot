@@ -16,7 +16,16 @@ interface Props {
 }
 
 export function FacilityCard({ facility, showDistance = true }: Props): JSX.Element {
-  const mapsUrl = `https://www.openstreetmap.org/?mlat=${facility.lat}&mlon=${facility.lon}#map=17/${facility.lat}/${facility.lon}`;
+  // Ratings only exist on live Google results, never on stored OSM records.
+  const { rating, ratingCount } = facility as RankedFacility & {
+    rating?: number;
+    ratingCount?: number;
+  };
+
+  const mapsUrl =
+    facility.source === 'google'
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(facility.name)}&query_place_id=${facility.sourceId}`
+      : `https://www.openstreetmap.org/?mlat=${facility.lat}&mlon=${facility.lon}#map=17/${facility.lat}/${facility.lon}`;
 
   return (
     <article className="facility">
@@ -41,6 +50,13 @@ export function FacilityCard({ facility, showDistance = true }: Props): JSX.Elem
       <p className="facility__meta">
         {facility.practitioner && <span className="tag tag--doctor">Named doctor</span>}
         <span className="tag">{TYPE_LABEL[facility.type]}</span>
+        {facility.source === 'google' && <span className="tag tag--google">Google</span>}
+        {typeof rating === 'number' && (
+          <span className="tag tag--rating">
+            ★ {rating.toFixed(1)}
+            {typeof ratingCount === 'number' ? ` (${ratingCount})` : ''}
+          </span>
+        )}
         {facility.emergency && <span className="tag tag--emergency">Emergency dept.</span>}
         {facility.openingHours === '24/7' && <span className="tag tag--open">Open 24h</span>}
       </p>

@@ -249,6 +249,22 @@ body {
   font-weight: 600;
 }
 
+.tag--google {
+  color: #1a73e8;
+  border-color: #1a73e8;
+}
+
+.tag--rating {
+  color: #b06000;
+  border-color: #e0a458;
+}
+
+.attribution {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 0.75rem 0 0;
+}
+
 .tag--emergency {
   color: var(--danger);
   border-color: var(--danger-border);

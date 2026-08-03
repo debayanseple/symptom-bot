@@ -16,6 +16,7 @@ import type { NearbyFacility } from '../geo/facilityRepo.js';
 import { rerank } from '../rag/retriever.js';
 import { synthesiseExplanation } from '../llm/synthesis.js';
 import { geocode } from '../geo/nominatim.js';
+import { dedupeAgainst, searchGooglePlaces } from '../places/googlePlaces.js';
 
 /**
  * The request pipeline, in the order the PRD locks down:
@@ -128,11 +129,30 @@ export async function handleChat(request: ChatRequest): Promise<ChatResponse> {
     fellBackToGP = facilities.length > 0;
   }
 
+  // --- 3b. Google Places (live, optional) --------------------------------
+  // Runs alongside the OSM geo-filter rather than replacing it. Google has far
+  // better coverage of Indian clinics — phone numbers especially — but its
+  // results cannot be stored, so they join the candidate set in memory only.
+  const googleResults = await searchGooglePlaces(analysis.specialty, location, radiusKm);
+  const freshGoogle = dedupeAgainst(googleResults, facilities).filter(
+    (place) => place.distanceKm <= radiusKm,
+  );
+
+  if (freshGoogle.length > 0) {
+    logger.info(
+      { google: freshGoogle.length, osm: facilities.length },
+      'merged google places results',
+    );
+  }
+
   // --- 4. RAG re-rank (within the geo-filtered candidate set) ------------
   // `radiusKm` here is the radius the search actually settled on, which may be
   // wider than requested if the first pass found nothing.
-  const ranked = (await rerank(facilities, message, analysis.specialty, radiusKm))
-    .slice(0, config.search.maxResults);
+  const ranked = (
+    await rerank([...facilities, ...freshGoogle], message, analysis.specialty, radiusKm)
+  ).slice(0, config.search.maxResults);
+
+  const usedGoogle = ranked.some((facility) => facility.source === 'google');
 
   // --- 5. Grounded synthesis ---------------------------------------------
   let summary = await synthesiseExplanation(message, analysis, ranked);
@@ -148,6 +168,7 @@ export async function handleChat(request: ChatRequest): Promise<ChatResponse> {
     facilities: ranked,
     radiusExpanded: expanded,
     radiusKm,
+    attribution: usedGoogle ? 'google' : 'osm',
     disclaimer: DISCLAIMER,
   };
 }
