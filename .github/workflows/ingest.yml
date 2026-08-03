@@ -1,0 +1,43 @@
+name: Weekly OSM ingestion
+
+# PRD section 6: batch re-sync on a schedule rather than live per-query, to
+# stay inside Overpass/Nominatim usage policies. GitHub Actions' free tier for
+# public repos covers this comfortably.
+on:
+  schedule:
+    # 02:30 UTC every Sunday — off-peak for the public Overpass instances.
+    - cron: '30 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      city:
+        description: 'City key from packages/api/src/ingest/cities.ts'
+        required: false
+        default: 'kolkata'
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run ingestion
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OSM_USER_AGENT: ${{ secrets.OSM_USER_AGENT }}
+          # No Ollama on the runner — the ingestion path does not need it.
+          LLM_ENABLED: 'false'
+        run: npm run ingest -- ${{ inputs.city || 'kolkata' }}
+
+      - name: Rebuild embeddings
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LLM_ENABLED: 'false'
+        run: npm run embed

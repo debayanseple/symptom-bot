@@ -1,0 +1,30 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Ignore every .env variant, then re-admit the committed template. Safer than
+# listing variants: a new .env.production can never be added by accident.
+.env*
+!.env.example
+
+# Credentials and keys, wherever they land
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+service-account*.json
+
+# transformers.js model cache
+.cache/
+packages/api/.models/
+
+# ingestion artefacts
+packages/api/.overpass-cache/
+*.log
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

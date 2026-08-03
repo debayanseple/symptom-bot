@@ -1,0 +1,35 @@
+services:
+  postgres:
+    # pgvector ships prebuilt on top of the official postgres image.
+    image: pgvector/pgvector:pg16
+    container_name: calldoc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: calldoc
+      POSTGRES_PASSWORD: calldoc
+      POSTGRES_DB: calldoc
+    ports:
+      - "5432:5432"
+    volumes:
+      - calldoc-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calldoc -d calldoc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional: run Ollama in a container instead of natively.
+  # `docker compose --profile llm up -d` then `docker exec calldoc-ollama ollama pull llama3.1:8b`
+  ollama:
+    image: ollama/ollama:latest
+    container_name: calldoc-ollama
+    profiles: ["llm"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - calldoc-ollama:/root/.ollama
+
+volumes:
+  calldoc-pgdata:
+  calldoc-ollama:

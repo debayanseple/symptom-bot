@@ -1,0 +1,30 @@
+{
+  "name": "call-doc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RAG-powered symptom-to-doctor-appointment chatbot. Zero recurring infrastructure cost.",
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "packages/api",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspace=@calldoc/shared && npm run build --workspace=@calldoc/api && npm run build --workspace=@calldoc/web",
+    "dev:api": "npm run dev --workspace=@calldoc/api",
+    "dev:web": "npm run dev --workspace=@calldoc/web",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run migrate --workspace=@calldoc/api",
+    "ingest": "npm run ingest --workspace=@calldoc/api",
+    "embed": "npm run embed --workspace=@calldoc/api",
+    "test": "npm run test --workspace=@calldoc/api",
+    "typecheck": "tsc --build --force"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
