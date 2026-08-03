@@ -28,3 +28,6 @@ packages/api/.overpass-cache/
 Thumbs.db
 .vscode/
 .idea/
+
+# Personal scratch notes (kept local; contains a personal email address)
+NOT REQUIRED.TXT

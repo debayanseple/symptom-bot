@@ -20,8 +20,11 @@ export const CITIES: Record<string, CityConfig> = {
     label: 'Kolkata',
     country: 'India',
     centre: { lat: 22.5726, lon: 88.3639 },
-    // Covers KMC plus Salt Lake, New Town, Howrah and Behala.
-    bbox: { south: 22.4, west: 88.22, north: 22.72, east: 88.52 },
+    // Greater Kolkata: KMC plus Salt Lake, New Town, Howrah, Behala, Barrackpore
+    // and Sonarpur. Measured against a tighter KMC-only box, this wider extent
+    // returns ~24% more facilities (736 vs 592 elements), so the outer suburbs
+    // are worth the extra Overpass time.
+    bbox: { south: 22.35, west: 88.15, north: 22.85, east: 88.62 },
   },
   bengaluru: {
     key: 'bengaluru',

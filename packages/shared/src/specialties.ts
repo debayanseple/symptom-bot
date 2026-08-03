@@ -54,7 +54,7 @@ export const SPECIALTY_META: Record<Specialty, SpecialtyMeta> = {
   cardiology: {
     label: 'Cardiology',
     blurb: 'Heart and circulatory conditions.',
-    osmSpecialities: ['cardiology', 'cardiac_surgery', 'vascular_surgery'],
+    osmSpecialities: ['cardiology', 'cardiac_surgery', 'cardiothoracic_surgery', 'vascular_surgery'],
   },
   dermatology: {
     label: 'Dermatology',
@@ -64,12 +64,12 @@ export const SPECIALTY_META: Record<Specialty, SpecialtyMeta> = {
   orthopaedics: {
     label: 'Orthopaedics',
     blurb: 'Bones, joints, ligaments and musculoskeletal injuries.',
-    osmSpecialities: ['orthopaedics', 'orthopedics', 'traumatology', 'sports_medicine'],
+    osmSpecialities: ['orthopaedics', 'orthopedics', 'traumatology', 'sports_medicine', 'physiotherapy', 'osteoarthritis'],
   },
   neurology: {
     label: 'Neurology',
     blurb: 'Brain, spinal cord and nerve disorders.',
-    osmSpecialities: ['neurology', 'neurosurgery'],
+    osmSpecialities: ['neurology', 'neurosurgery', 'stroke_rehab'],
   },
   gastroenterology: {
     label: 'Gastroenterology',
@@ -94,22 +94,22 @@ export const SPECIALTY_META: Record<Specialty, SpecialtyMeta> = {
   dentistry: {
     label: 'Dentistry',
     blurb: 'Teeth, gums and oral health.',
-    osmSpecialities: ['dentist', 'dentistry', 'orthodontics', 'oral_surgery'],
+    osmSpecialities: ['dentist', 'dentistry', 'orthodontics', 'oral_surgery', 'dental_oral_maxillo_facial_surgery'],
   },
   gynaecology: {
     label: 'Gynaecology & Obstetrics',
     blurb: 'Reproductive health, pregnancy and childbirth.',
-    osmSpecialities: ['gynaecology', 'gynecology', 'obstetrics', 'fertility'],
+    osmSpecialities: ['gynaecology', 'gynecology', 'obstetrics', 'maternity', 'fertility'],
   },
   paediatrics: {
     label: 'Paediatrics',
     blurb: 'Medical care for infants, children and adolescents.',
-    osmSpecialities: ['paediatrics', 'pediatrics', 'neonatology'],
+    osmSpecialities: ['paediatrics', 'pediatrics', 'neonatology', 'paediatric_surgery', 'pediatric_surgery'],
   },
   psychiatry: {
     label: 'Psychiatry & Mental Health',
     blurb: 'Mental health, mood, anxiety and behavioural conditions.',
-    osmSpecialities: ['psychiatry', 'psychotherapy', 'psychology'],
+    osmSpecialities: ['psychiatry', 'psychotherapy', 'psychology', 'child_psychiatry'],
   },
   urology: {
     label: 'Urology',

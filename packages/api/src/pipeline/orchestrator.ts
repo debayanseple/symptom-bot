@@ -114,7 +114,9 @@ export async function handleChat(request: ChatRequest): Promise<ChatResponse> {
   }
 
   // --- 4. RAG re-rank (within the geo-filtered candidate set) ------------
-  const ranked = (await rerank(facilities, message, analysis.specialty, config.search.maxRadiusKm))
+  // `radiusKm` here is the radius the search actually settled on, which may be
+  // wider than requested if the first pass found nothing.
+  const ranked = (await rerank(facilities, message, analysis.specialty, radiusKm))
     .slice(0, config.search.maxResults);
 
   // --- 5. Grounded synthesis ---------------------------------------------

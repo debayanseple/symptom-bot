@@ -49,7 +49,15 @@ export function mapOverpassElement(element: OverpassElement): MappedFacility | n
     lat,
     lon,
     address: composeAddress(tags),
-    phone: normalisePhone(tags['phone'] ?? tags['contact:phone'] ?? tags['phone:mobile'] ?? tags['mobile']),
+    // `contact:mobile` is the second most common phone key in Indian OSM data
+    // after `contact:phone`, and was previously being dropped.
+    phone: normalisePhone(
+      tags['phone'] ??
+        tags['contact:phone'] ??
+        tags['phone:mobile'] ??
+        tags['contact:mobile'] ??
+        tags['mobile'],
+    ),
     website: tags['website'] ?? tags['contact:website'] ?? tags['url'] ?? null,
     openingHours: tags['opening_hours'] ?? null,
     emergency: tags['emergency'] === 'yes' || tags['healthcare:emergency'] === 'yes',

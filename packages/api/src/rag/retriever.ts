@@ -17,7 +17,14 @@ export async function rerank(
   candidates: NearbyFacility[],
   userQuery: string,
   specialty: Specialty,
-  maxRadiusKm: number,
+  /**
+   * The radius actually searched, NOT the configured maximum. Normalising
+   * against the maximum compresses every distance into the top of the range
+   * (at an 8 km search, 2 km and 7 km both score ~0.9 against a 25 km ceiling),
+   * which let the small contactability term outrank a facility three times
+   * closer. Normalising against the effective radius keeps distance dominant.
+   */
+  searchRadiusKm: number,
 ): Promise<RankedFacility[]> {
   if (candidates.length === 0) return [];
 
@@ -28,7 +35,7 @@ export async function rerank(
   return candidates
     .map((facility) => {
       const semanticScore = semanticScores.get(facility.id);
-      const score = blendScore(facility, semanticScore, specialty, maxRadiusKm);
+      const score = blendScore(facility, semanticScore, specialty, searchRadiusKm);
       return {
         ...facility,
         ...(semanticScore === undefined ? {} : { semanticScore }),
@@ -86,9 +93,9 @@ function blendScore(
   facility: NearbyFacility,
   semanticScore: number | undefined,
   specialty: Specialty,
-  maxRadiusKm: number,
+  searchRadiusKm: number,
 ): number {
-  const proximity = Math.max(0, 1 - facility.distanceKm / maxRadiusKm);
+  const proximity = Math.max(0, 1 - facility.distanceKm / Math.max(1, searchRadiusKm));
 
   // Explicitly tagged with the requested specialty beats a generic listing.
   const exactSpecialty = facility.specialtyTags.includes(specialty) ? 1 : 0;

@@ -6,6 +6,13 @@ import type { FastifyInstance } from 'fastify';
 // embedding model — i.e. the parts of the system that can never be down.
 process.env.LLM_ENABLED = 'false';
 
+// Force an unreachable database. Set before the config module is imported, and
+// dotenv does not override an existing process.env value, so this wins over
+// whatever DATABASE_URL is in .env. Without it these tests would pass or fail
+// depending on whether the developer happens to have a database configured —
+// the DB-outage assertions below would silently stop testing anything.
+process.env.DATABASE_URL = 'postgres://unused:unused@127.0.0.1:1/unreachable';
+
 const { buildServer } = await import('../src/index.ts');
 
 describe('server (no external dependencies)', () => {
